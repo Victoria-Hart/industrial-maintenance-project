@@ -1,0 +1,15 @@
+# Python
+.venv/
+.venv_old/
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Generated streaming data
+data/streaming/predictions.jsonl
+data/streaming/maintenance_alerts.json
