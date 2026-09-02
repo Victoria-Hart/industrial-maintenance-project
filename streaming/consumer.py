@@ -1,4 +1,6 @@
-from kafka import KafkaConsumer
+from kafka import KafkaConsumer, KafkaProducer
+from dotenv import load_dotenv
+import os
 import json
 import joblib
 import pandas as pd
@@ -8,6 +10,7 @@ from datetime import datetime
 from app.utils.risk import risk_level
 from app.utils.recommendations import generate_recommendation
 
+load_dotenv()
 
 # -------------------------------------------------
 # Paths
@@ -119,8 +122,12 @@ print("Model loaded!")
 # -------------------------------------------------
 
 consumer = KafkaConsumer(
-    "machine-sensors",
-    bootstrap_servers="localhost:9092",
+    "machine-data",
+    bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS"),
+    security_protocol="SASL_SSL",
+    sasl_mechanism="PLAIN",
+    sasl_plain_username=os.getenv("KAFKA_API_KEY"),
+    sasl_plain_password=os.getenv("KAFKA_API_SECRET"),
     auto_offset_reset="earliest",
     group_id="xgboost-debug",
     value_deserializer=lambda value: json.loads(
@@ -130,6 +137,16 @@ consumer = KafkaConsumer(
 
 print("Waiting for machine sensor data...")
 
+prediction_producer = KafkaProducer(
+    bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS"),
+    security_protocol="SASL_SSL",
+    sasl_mechanism="PLAIN",
+    sasl_plain_username=os.getenv("KAFKA_API_KEY"),
+    sasl_plain_password=os.getenv("KAFKA_API_SECRET"),
+    value_serializer=lambda value: json.dumps(value).encode("utf-8")
+)
+
+prediction_topic = "machine-predictions"
 
 # -------------------------------------------------
 # Process Incoming Machine Data
@@ -187,6 +204,13 @@ for message in consumer:
         "risk": status,
         "recommendation": recommendation
     }
+
+    prediction_producer.send(
+        prediction_topic,
+        value=prediction
+        )
+
+    prediction_producer.flush()
 
     with open(PREDICTIONS_PATH, "a") as file:
 

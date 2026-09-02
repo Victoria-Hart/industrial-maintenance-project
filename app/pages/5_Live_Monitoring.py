@@ -1,8 +1,10 @@
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+from kafka import KafkaConsumer, KafkaProducer
 
 
 # -------------------------------------------------
@@ -14,6 +16,42 @@ st.set_page_config(
     page_icon="📡"
 )
 
+@st.cache_resource
+def get_kafka_consumer():
+
+    return KafkaConsumer(
+        "machine-predictions",
+        bootstrap_servers=st.secrets["KAFKA_BOOTSTRAP_SERVERS"],
+        security_protocol="SASL_SSL",
+        sasl_mechanism="PLAIN",
+        sasl_plain_username=st.secrets["KAFKA_API_KEY"],
+        sasl_plain_password=st.secrets["KAFKA_API_SECRET"],
+        auto_offset_reset="latest",
+        group_id="streamlit-monitoring",
+        value_deserializer=lambda value: json.loads(
+            value.decode("utf-8")
+        )
+    )
+
+@st.cache_resource
+def get_control_producer():
+    return KafkaProducer(
+        bootstrap_servers=st.secrets["KAFKA_BOOTSTRAP_SERVERS"],
+        security_protocol="SASL_SSL",
+        sasl_mechanism="PLAIN",
+        sasl_plain_username=st.secrets["KAFKA_API_KEY"],
+        sasl_plain_password=st.secrets["KAFKA_API_SECRET"],
+        value_serializer=lambda value: json.dumps(value).encode("utf-8")
+    )
+
+
+def send_control_command(command):
+    producer = get_control_producer()
+    producer.send(
+        "demo-control",
+        value={"command": command}
+    )
+    producer.flush()
 
 # -------------------------------------------------
 # Session State
@@ -90,6 +128,22 @@ def load_alerts():
 
         return []
 
+def load_kafka_predictions(consumer):
+
+    records = []
+
+    messages = consumer.poll(
+        timeout_ms=100,
+        max_records=10
+    )
+
+    for topic_messages in messages.values():
+
+        for message in topic_messages:
+
+            records.append(message.value)
+
+    return records
 
 # -------------------------------------------------
 # Save Alerts
@@ -143,6 +197,7 @@ with control_col1:
         ):
 
             st.session_state.demo_running = False
+            send_control_command("stop")
             st.rerun()
 
     else:
@@ -153,6 +208,9 @@ with control_col1:
         ):
 
             st.session_state.demo_running = True
+
+            # Send command to local demo controller
+            send_control_command("start")
 
             # Load current data immediately
             st.session_state.last_df = load_predictions()
@@ -189,10 +247,29 @@ def live_monitoring():
 
     if st.session_state.demo_running:
 
-        df = load_predictions()
+        consumer = get_kafka_consumer()
+
+        new_predictions = load_kafka_predictions(consumer)
+
+        if new_predictions:
+
+            new_df = pd.DataFrame(new_predictions)
+
+            if st.session_state.last_df.empty:
+                st.session_state.last_df = new_df
+
+            else:
+                st.session_state.last_df = pd.concat(
+                    [
+                        st.session_state.last_df,
+                        new_df
+                    ],
+                    ignore_index=True
+                )
+
+        df = st.session_state.last_df
         alerts = load_alerts()
 
-        st.session_state.last_df = df
         st.session_state.last_alerts = alerts
 
     else:

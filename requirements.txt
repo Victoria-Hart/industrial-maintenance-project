@@ -21,3 +21,4 @@ shap==0.48.0
 
 # Utilities
 joblib==1.5.3
+kafka-python==2.2.15

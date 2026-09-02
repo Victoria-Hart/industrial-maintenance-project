@@ -1,11 +1,15 @@
 from kafka import KafkaProducer
+from dotenv import load_dotenv
 import pandas as pd
 import json
+import os
 import time
 import argparse
 import random
 import joblib
 from pathlib import Path
+
+load_dotenv()
 
 # -------------------------------------------------
 # Command-line arguments
@@ -81,11 +85,15 @@ print(f"High-risk observations: {len(high_risk_rows)}")
 # -------------------------------------------------
 
 producer = KafkaProducer(
-    bootstrap_servers="localhost:9092",
+    bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS"),
+    security_protocol="SASL_SSL",
+    sasl_mechanism="PLAIN",
+    sasl_plain_username=os.getenv("KAFKA_API_KEY"),
+    sasl_plain_password=os.getenv("KAFKA_API_SECRET"),
     value_serializer=lambda value: json.dumps(value).encode("utf-8")
 )
 
-topic = "machine-sensors"
+topic = "machine-data"
 
 print("Starting randomized machine sensor stream...")
 print("Press Ctrl+C to stop.")

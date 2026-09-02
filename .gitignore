@@ -1,4 +1,5 @@
 # Python
+.env
 .venv/
 .venv_old/
 __pycache__/
@@ -13,3 +14,6 @@ __pycache__/
 # Generated streaming data
 data/streaming/predictions.jsonl
 data/streaming/maintenance_alerts.json
+
+# Streamlit secrets
+.streamlit/secrets.toml
